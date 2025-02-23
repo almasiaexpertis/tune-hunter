@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/components/ui/use-toast";
 import {
   Select,
   SelectContent,
@@ -16,10 +17,63 @@ const Index = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [duration, setDuration] = useState("all");
   const [sortBy, setSortBy] = useState("relevance");
+  const [apiKey, setApiKey] = useState("");
+  const [results, setResults] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement search functionality
+    
+    if (!apiKey) {
+      toast({
+        title: "API Key Required",
+        description: "Please enter your YouTube API key to search for playlists",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!searchQuery.trim()) {
+      toast({
+        title: "Search Query Required",
+        description: "Please enter a search term",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&type=playlist&q=${encodeURIComponent(
+          searchQuery
+        )}&order=${sortBy}&maxResults=10&key=${apiKey}`
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch playlists');
+      }
+
+      const data = await response.json();
+      setResults(data.items);
+      
+      if (data.items.length === 0) {
+        toast({
+          title: "No Results",
+          description: "No playlists found for your search query",
+          variant: "default"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to search playlists. Please check your API key and try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -43,9 +97,9 @@ const Index = () => {
                 className="w-full bg-white/5 border-white/10"
               />
             </div>
-            <Button type="submit" className="btn-primary">
+            <Button type="submit" className="btn-primary" disabled={isLoading}>
               <Search className="w-4 h-4 mr-2" />
-              Search
+              {isLoading ? "Searching..." : "Search"}
             </Button>
           </div>
           
@@ -74,13 +128,55 @@ const Index = () => {
                 <SelectContent>
                   <SelectItem value="relevance">Relevance</SelectItem>
                   <SelectItem value="date">Date</SelectItem>
-                  <SelectItem value="views">View Count</SelectItem>
+                  <SelectItem value="viewCount">View Count</SelectItem>
                   <SelectItem value="rating">Rating</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="apiKey">YouTube API Key (Temporary)</Label>
+            <Input
+              id="apiKey"
+              type="password"
+              placeholder="Enter your YouTube API key"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              className="w-full bg-white/5 border-white/10"
+            />
+            <p className="text-xs text-gray-400">
+              This is a temporary solution. In production, API keys should be stored securely on the server.
+            </p>
+          </div>
         </form>
+
+        {results.length > 0 && (
+          <div className="mt-8 space-y-4">
+            {results.map((item) => (
+              <div key={item.id.playlistId} className="glass p-4 rounded-lg flex gap-4">
+                <img
+                  src={item.snippet.thumbnails.default.url}
+                  alt={item.snippet.title}
+                  className="w-24 h-24 object-cover rounded"
+                />
+                <div className="flex-1 text-left">
+                  <h3 className="font-semibold">{item.snippet.title}</h3>
+                  <p className="text-sm text-gray-400">{item.snippet.channelTitle}</p>
+                  <p className="text-sm text-gray-400 mt-2">{item.snippet.description}</p>
+                  <a
+                    href={`https://www.youtube.com/playlist?list=${item.id.playlistId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline text-sm"
+                  >
+                    View Playlist
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="mt-16 text-center">
           <h2 className="text-2xl font-semibold mb-4">Start Your Free Trial</h2>
